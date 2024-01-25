@@ -10,7 +10,7 @@ In this repository, we have open-sourced the core code for ParamTree. This code 
 - Python 3.7
 - pip3 install -r requirements.txt
 - Install PostgreSQL 13.3
-- Install Extension in PostgresL: pageinspect and pg_hint_plan
+- Install Extension in PostgreSQL: pageinspect and pg_hint_plan
 - alter system set max_parallel_workers_per_gather =0; 
 - alter system set enable_bitmapscan = off; 
 - Analyze;
