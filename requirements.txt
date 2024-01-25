@@ -1,0 +1,9 @@
+pandas
+psycopg2-binary
+tqdm
+scikit-learn
+numpy
+paramiko
+matplotlib
+seaborn
+scipy
