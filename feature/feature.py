@@ -3,13 +3,13 @@ import json
 import numpy as np
 
 
-from .info import features,dbms_cparams,query_cparams
+from .infos import features,dbms_cparams,query_cparams
 BLCKSZ = 8 * 1024 #bytes
 
 
 class FeatureExtract():
     def __init__(self):
-        knob_file = './schemeinfo/conf.json'
+        knob_file = './data/util/conf.json'
         with open(knob_file) as f:
             confs = json.load(f)
         self.general_features = confs.keys()
@@ -21,6 +21,8 @@ class FeatureExtract():
         res = {}
         op = plan_json['name']
         for key in self.features[op]['runtime_cost']['node_features']:
+            # if key not in plan_json.keys():
+            #     print(key)
             if key in dbms_cparams:
                 if plan_json[key] == "on":
                     res[key] = 1
@@ -54,8 +56,8 @@ class FeatureExtract():
     def get_model_raw_feature(self,plan_json,operator,model):
         
         sort_mem_bytes = int(plan_json['work_mem'])*1024
-        effective_cache_size = int(plan_json['effective_cache_size']) #pages
-        work_mem = int(plan_json['work_mem'])*1024 #bytes
+        effective_cache_size = int(plan_json['effective_cache_size']) 
+        work_mem = int(plan_json['work_mem'])*1024 
         X = self.get_general_features(plan_json)
         if operator == 'Sort' and model == 'startup_cost':
             X['Nt'] = 0
@@ -63,7 +65,6 @@ class FeatureExtract():
             X['Ni'] = 0
             X['Ns'] = 0
             X['Nr'] = 0
-            X['Np'] = 0
             X['Nm'] = 0
             tuples = max(1,plan_json['Rows'])
             output_bytes = tuples * plan_json['SoutAvg']
@@ -98,7 +99,6 @@ class FeatureExtract():
             X['Ni'] = 0
             X['Ns'] = 0
             X['Nr'] = 0
-            X['Np'] = plan_json['Rows']
             X['Nm'] = 0
             X['y'] = plan_json['Actual Total Time']-plan_json['Actual Startup Time']
 
@@ -113,11 +113,11 @@ class FeatureExtract():
             else:
                 X['Ns'] = np.sign(Right_SinTot - 1) * Right_SinTot / BLCKSZ * 2
             X['Nr'] = 0
-            X['Np'] = 0
-            X['Nm'] = 0
+            X['Nm'] = 0 
             X['y']  = plan_json['Actual Startup Time']-plan_json['Right Total Time']
 
         elif operator == 'Hash Join' and model == 'runtime_cost':
+            # innerbucketsize = 1/(plan_json['Hash Buckets']*plan_json['Hash Batches'])
             innerbucketsize = plan_json['inner_bucket_size']
             Right_SinTot = plan_json['RightRows'] * plan_json['RightSoutAvg']
             Left_SinTot = plan_json['LeftRows'] * plan_json['LeftSoutAvg']
@@ -129,7 +129,6 @@ class FeatureExtract():
             else:
                 X['Ns'] = np.sign(plan_json['BatchesNum'] - 1) * (2*Right_SinTot / BLCKSZ + 4 * Left_SinTot / BLCKSZ)
             X['Nr'] = 0
-            X['Np'] = plan_json['Rows']
             rows = plan_json['RightRows']*innerbucketsize
             if rows < 1:
                 rows = 1
@@ -144,16 +143,15 @@ class FeatureExtract():
             X['Ni'] = 0
             X['Ns'] = plan_json['TablePages']
             X['Nr'] = 0
-            X['Np'] = -plan_json['Rows']
             X['Nm'] = 0
             X['y'] = plan_json['Actual Total Time'] - plan_json['InitPlan Cost Time']
 
         elif operator == 'Index Scan' and model == 'runtime_cost':
             plan_json['fetch_rows'] = np.ceil(plan_json['LeftRows'] * plan_json['Selectivity'])
-            X['Nt'] = plan_json['fetch_rows'] 
+            X['Nt'] = plan_json['fetch_rows'] #plan_json['LeftRows'] * plan_json['Selectivity']
             X['No'] = plan_json['fetch_rows'] * (
                         plan_json['CondNum'] + plan_json['FilterNum']) + np.ceil(np.log2(plan_json['LeftRows']))
-            X['Ni'] = plan_json['fetch_rows']
+            X['Ni'] = plan_json['fetch_rows']#plan_json['LeftRows'] * plan_json['Selectivity']
             indexCorrelation = plan_json['IndexCorrelation']
 
 
@@ -191,7 +189,6 @@ class FeatureExtract():
 
             X['Ns'] = X['Ns'] if X['Ns'] > 0 else 0
             X['Nr'] = X['Nr'] if X['Nr'] > 0 else 0
-            X['Np'] = plan_json['Rows']
             X['Nm'] = (plan_json['IndexTreeHeight'] + 1) * 50
             X['y'] = plan_json['Actual Total Time'] - plan_json['InitPlan Cost Time']
 
@@ -202,7 +199,6 @@ class FeatureExtract():
             X['Ni'] = plan_json['LeftRows'] * plan_json['Selectivity']
             X['Ns'] = 0
             X['Nr'] = np.ceil(plan_json['Selectivity'] * plan_json['IndexTreePages'])
-            X['Np'] = 1
             X['Nm'] = (plan_json['IndexTreeHeight']+1)*50
             X['y'] = plan_json['Actual Total Time'] - plan_json['InitPlan Cost Time']
 
@@ -232,7 +228,6 @@ class FeatureExtract():
                 b += plan_json['Right Startup Time']*(plan_json['LeftRows']-1)+plan_json['LeftRows']*(plan_json['Right Total Time']-plan_json['Right Startup Time'])*inner_scan_frac
                 X['No'] = plan_json['LeftRows'] * plan_json['RightRows']*inner_scan_frac*plan_json['CondNum']
                 X['Ns'] = 0
-            X['Np'] = plan_json['Rows']
             X['Nm'] = 0 
             X['y'] = plan_json['Actual Total Time']-b
 
@@ -250,7 +245,6 @@ class FeatureExtract():
             b = plan_json['Left Total Time']+plan_json['Right Total Time']
             X['No'] = plan_json['CondNum']*(plan_json['LeftRows'] + plan_json['RightRows']*rescanratio)
             X['Ns'] = 0
-            X['Np'] = 0
             X['Nm'] = (plan_json['Right Total Time']-plan_json['Right Startup Time'])*(rescanratio-1)
             X['y'] = plan_json['Actual Total Time']-b
         
@@ -260,7 +254,6 @@ class FeatureExtract():
             X['Ni'] = 0
             X['Ns'] = 0
             X['Nr'] = 0
-            X['Np'] = 0
             X['Nm'] = 0
             nbatches = 1
             Left_SinTot = plan_json['LeftRows'] * plan_json['LeftSoutAvg']
@@ -293,7 +286,6 @@ class FeatureExtract():
             X['Ni'] = 0
             X['Ns'] = 0
             X['Nr'] = 0
-            X['Np'] = 0
             X['Nm'] = 0
             nbatches = 1
             X['y'] = plan_json['Actual Total Time']-plan_json['Actual Startup Time']
@@ -317,21 +309,18 @@ class FeatureExtract():
                 X['No'] = plan_json['Rows']*plan_json['OutAggColumnNum']
         if X['y']<0:
             X['y'] = 0
-        X['Np'] = 0
         for key in ['NT','NO','NI','NS','NR']:
             X[key] = X[key[0]+key[1].lower()]
 
 
         X['No'] = X['No']+X['Nm']
-        X['Nm'] = 0
-        X['Np'] = 0
         X['Nt'] = X['Nt'] * plan_json['Loops']
         X['No'] = X['No'] * plan_json['Loops']
         X['Ni'] = X['Ni'] * plan_json['Loops']
         X['Ns'] = X['Ns'] * plan_json['Loops']
         X['Nr'] = X['Nr'] * plan_json['Loops']
-        X['Np'] = X['Np']
-        X['Nm'] = X['Nm']
+        X['Np'] = 0  # Reserve For future use
+        X['Nm'] = 0  
         if model == 'runtime_cost':
             X['y'] = X['y'] * plan_json['Loops'] - plan_json['SubPlan Cost Time']
         else:

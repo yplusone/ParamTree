@@ -1,3 +1,5 @@
+# Split a dataset based on an attribute and an attribute value
+# from sklearn.linear_model import LinearRegression, RANSACRegressor, HuberRegressor, Ridge
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
@@ -7,6 +9,9 @@ from database_util.db_connector import *
 from database_util.database_info import *
 from .node import Node
 np.seterr(divide='ignore', invalid='ignore')
+import random
+
+from feature.infos import all_cparams
 
 
 class MobTree():
@@ -439,6 +444,166 @@ class Models():
                     node_features = self.feature_tool.features[operator][modelname]['node_features']
                 self.models[operator][modelname]= MobTree(operator = operator, modelname = modelname,min_size=min_size, node_features=node_features,
                                     leaf_features=self.feature_tool.leaf_features,scale=self.scale,alpha = 0.05, trim = 0.1,coefs=coefs)
+
+
+
+    def check(self,active_learning_tool,buffer):
+
+        # check_operator = ""
+        # max_q = 1
+        # q_info = {}
+        # op_cand = []
+        # for operator in self.models.keys():
+        #     for model_name in self.models[operator].keys():
+        #         if op_num[operator] == 0:
+        #             continue
+        #         q = np.log(self.models[operator][model_name].get_predict_history_performance()*op_num[operator])
+        #         if 'Scan' in operator:
+        #             q*=2
+        #         if operator not in q_info.keys():
+        #             q_info[operator] = q
+        #         elif q>q_info[operator]:
+        #             q_info[operator] = q
+        #
+        # random.seed(time.time())
+        # op_sort = np.argsort([q_info[op] for op in q_info.keys()])
+        # weights = np.zeros(len(op_sort))
+        # for i in range(len(op_sort)):
+        #     weights[op_sort[i]] = i
+        responsibility,sqls = self.get_responsibility(buffer)
+        op_responsibility = {op:[] for op in responsibility.keys()}
+        # check_operator = random.choices(list(q_info.keys()),k = 1,weights = weights)[0]
+        for op in responsibility.keys():
+            for t in responsibility[op].keys():
+                op_responsibility[op] += responsibility[op][t]
+        random.seed(time.time())
+        op_sort = np.argsort([op_responsibility[t] for t in op_responsibility.keys()])
+        weights = np.zeros(len(op_sort))
+        for i in range(len(op_sort)):
+            weights[op_sort[i]] = i+1
+        check_operator = random.choices(list(responsibility.keys()),k=1,weights=weights)[0]
+        # check_operator = random.choices(list(op_responsibility.keys()), k=1, weights=[np.mean(op_responsibility[t]) for t in op_responsibility.keys()])[0]
+        nodes = []
+        for model_name in self.models[check_operator].keys():
+            nodes += self.models[check_operator][model_name].check(active_learning_tool)
+        vote_res = {}
+        for node in nodes:
+            check_dim = active_learning_tool.get_sensitivity(op=check_operator,filters=node.filters)
+            if check_dim not in vote_res.keys():
+                vote_res[check_dim] = 1
+            else:
+                vote_res[check_dim] += 1
+        check_dim = sorted(vote_res.items(), key=lambda i: i[1], reverse=True)[0][0]
+        return check_operator,check_dim
+
+    def get_responsibility(self,buffer):
+        ops = ["Seq Scan", "Index Scan", "Index Only Scan",'Hash Join', 'Merge Join', 'Nested Loop','Sort', 'Aggregate']
+
+        def flatten(plan_trees):
+
+            def get_op(plan):
+                if 'Plans' in plan.keys():
+                    for item in plan['Plans']:
+                        for x in get_op(item):
+                            yield x
+                yield plan
+
+            res = {op: [] for op in ops}
+            for plan in plan_trees:
+                all_time = plan['planinfo']['Plan']['Actual Total Time']
+                plan_qerror = max(all_time/plan['predict'],plan['predict']/all_time)
+                query = {'sql':plan['query'],'template':plan['template']}
+                for item in get_op(plan['planinfo']['Plan']):
+                    item['All Time'] = all_time
+                    item['query'] = query
+                    item['qerror'] = plan_qerror
+                    if item['Node Type'] in ops:
+                        res[item['Node Type']].append(item)
+
+            return res
+
+        op_items = flatten(buffer)
+        responsibility = {op: {} for op in ops}
+        sqls = {op: {} for op in ops}
+        check_operator = ""
+        for op in op_items.keys():
+            for item in op_items[op]:
+                if 'nodeid' not in item.keys():
+                    continue
+
+                if item['All Time']<0.1:
+                    rs = 0
+                else:
+                    rs = abs(item['nodeid']['runtime_true']-item['nodeid']['runtime_pred']) / item['All Time'] * item['qerror'] *2#* item['qerror']
+                key = tuple(item['nodeid']['runtime_nodeid'])
+                if key in responsibility[op].keys():
+                    responsibility[op][key].append(rs)
+                    sqls[op][key].append({'sql':item['query']['sql'],'template':item['query']['template'],'qerror':item['qerror']})
+                else:
+                    responsibility[op][key] = [rs]
+                    sqls[op][key] = [{'sql':item['query']['sql'],'template':item['query']['template'],'qerror':item['qerror']}]
+        return responsibility,sqls
+
+    def check_node(self,active_learning_tool,buffer,random_ratio):
+
+        responsibility,sqls = self.get_responsibility(buffer)
+        ops = list(responsibility.keys())
+        op_res = {t:[] for t in ops}
+        for op in responsibility.keys(): 
+            for key in responsibility[op].keys():
+                op_res[op] += responsibility[op][key]
+        random.seed(time.time())
+
+        while True:
+            if np.random.random()<1-random_ratio:
+                check_operator = random.choices(ops,k=1,weights=[max(0.1,np.median(op_res[op])) for op in ops])[0]
+            else:
+                check_operator = random.choices(ops, k=1)[0]
+
+            new_responsibility = []
+            for key in responsibility.keys():
+                if key.split(",")[0] == check_operator:
+                    for nodeid in responsibility[key].keys():
+                        new_responsibility.append({"op":key,'nodeid':nodeid,'rs':np.mean(responsibility[key][nodeid])})
+            if len(new_responsibility) == 0:
+                continue
+            else:
+                break
+        self.check_num += 1
+        id = random.choices(np.arange(len(new_responsibility)), k=1, weights=[item['rs'] for item in new_responsibility])[0]
+        selected_item = new_responsibility[id]
+        node = self.models[check_operator]['runtime_cost'].root
+        max_responsibility_nodeid = selected_item['nodeid']
+        for i in max_responsibility_nodeid:
+            node = node.children[i]
+        selected_node = node
+        # sort_id = np.argsort([t['rs'] for t in new_responsibility],)[::-1]
+        # for id in sort_id:
+        #     item = new_responsibility[id]
+        #     node = self.models[check_operator]['runtime_cost'].root
+        #     max_responsibility_nodeid = item['nodeid']
+        #     for i in max_responsibility_nodeid:
+        #         node = node.children[i]
+        #     if len(node.checked_dims)<len(all_cparams):
+        #         selected_node = node
+        #         selected_item = item
+        #         break
+        if selected_node:
+            sqls = sqls[selected_item['op']][selected_item['nodeid']]
+            if len(sqls)>20:
+                # sql_res.sort(key=lambda x: x['qerror'])
+                # sql_res = sql_res[-20:]
+                ids = random.choices(np.arange(len(sqls)), k=20,
+                                    weights=[item['qerror'] for item in sqls])
+                sql_res = [sqls[t] for t in ids]
+            else:
+                sql_res = sqls
+            check_dim = active_learning_tool.get_sensitivity(op=check_operator, filters=selected_node.filters,
+                                                             checked_dims=list(selected_node.checked_dims))
+
+            return check_operator,check_dim,selected_node,sql_res
+        else:
+            return None,None,None,None
 
     def get_model_raw_data(self,data,operator,model):
         dataset = []

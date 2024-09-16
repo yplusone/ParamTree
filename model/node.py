@@ -2,9 +2,13 @@ from matplotlib import pyplot as plt
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.decomposition import NMF
+from sklearn.linear_model import LinearRegression, RANSACRegressor, HuberRegressor, Ridge
 from collections import *
 from scipy.stats import chi2
 from scipy.linalg import sqrtm
+import copy
 
 from util.util import *
 from feature.feature import *
@@ -82,6 +86,7 @@ class Node():
         if len(x[0]) == 0:
             return {}
         lr = MyLinearRegression()
+        # lr = BayesianRidge()
         lr.fit(x, y)
         obj = {}
         obj['model'] = lr
@@ -437,6 +442,10 @@ class Node():
                 if len(groups[0]) < self.min_size or len(groups[1]) < self.min_size:
                     continue
                 mse = self.groupscore_metric(groups)
+                # if self.get_group_rscore(groups[0]) < 0.5 or len(groups[0]) < self.min_size:
+                #     continue
+                # if self.get_group_rscore(groups[1]) < 0.5 or len(groups[1]) < self.min_size:
+                #     continue
                 if mse < b_score:
                     b_index, b_value, b_score, b_groups = index, val, mse, groups
         else:
@@ -470,6 +479,9 @@ class Node():
 
         if len(rval) and rval['pval'][index] < self.alpha:
             left_groups = self.recursive_split(index, data_left)
+            # if left_groups != None:
+            #     for x in self.split_attribute(index,left_groups):
+            #         yield x
             if left_groups != None:
                 yield left_groups['left']
                 yield left_groups['right']
@@ -482,6 +494,9 @@ class Node():
 
         if len(rval) and rval['pval'][index] < self.alpha:
             right_groups = self.recursive_split(index, data_right)
+            # if right_groups != None:
+            #     for x in self.split_attribute(index, right_groups):
+            #         yield x
             if right_groups != None:
                 yield right_groups['left']
                 yield right_groups['right']
@@ -517,14 +532,33 @@ class Node():
 
     def to_terminal(self, group):
         group_array = np.array(group)
+        # if self.operator in []:#['Seq Scan', 'Index Scan', 'Index Only Scan']:
+        #     cpu_x = group_array[:, len(self.node_features):-5]
+        #     cpu_y = group_array[:, -1]-group_array[:, -2]
+        #     lr = MyLinearRegression()
+        #     lr.fit(cpu_x, cpu_y.reshape(-1, 1))
+        #     coef = lr.coef_
+        #     io_x = group_array[:, -5:-3]
+        #     io_y = group_array[:, -2]
+        #     lr = MyLinearRegression()
+        #     lr.fit(io_x, io_y.reshape(-1, 1))
+        #     coef += lr.coef_ + [0,0]
+        #     intercept = 0
+
 
         X = group_array[:, len(self.node_features):-1]
         y = group_array[:, -1]
 
+        # X_gen = np.array(
+        #     [[random.random() * (max(X[:, i]) - min(X[:, i]) + 1) for _ in range(round(np.ceil(np.ceil(len(X))/100)))] for i in range(len(X[0]))]).T
+        # y_gen = X_gen.dot(self.default_model[0].T)
+        # lr = MyLinearRegression()
+        # lr.fit(np.vstack((X,X_gen)), np.vstack((y.reshape(-1,1),y_gen.reshape(-1,1))))
         lr = MyLinearRegression()
         lr.fit(X,y.reshape(-1,1))
         coef = lr.coef_
         intercept = lr.intercept_
+        # self.mape_score = lr.mape_score(group_array[:, len(self.node_features):-1], group_array[:, -1])
 
         return [coef, intercept]
 
@@ -610,6 +644,41 @@ class Node():
         dim_info = types
         return dim_info,np.array(normalized_value_list)
 
+
+    def get_ddpg_state(self,filters):
+        mape_list = self.get_node_predict_mape_list(self.dataset)
+        dim_info,normalized_value=self.normalizeValue(self.dataset)
+        res=[]
+        for i,f in enumerate(self.node_features):#对每个dim
+            res.append(np.mean([mape_list[j]*value for j,value in enumerate(normalized_value[i])]))
+        filter_count = [0 for _ in range(len(self.node_features))]
+        for filter in filters:
+            filter_count[filter['index']] += 1
+        return res+filter_count
+
+    def check(self, active_learning_tool):
+        if len(self.filters)>=10:
+            return [],[]
+        if len(self.dataset):
+            rval = self.mob_fit_fluctests(self.dataset[:, len(self.node_features):-1], self.dataset[:, -1],
+                                      minsplit=self.min_size, trim=self.trim,
+                                      partvar=self.dataset[:, :len(self.node_features)])
+        # state = self.get_ddpg_state(filters)
+
+        if len(self.dataset) and len(rval):
+            check_dim =self.node_features[rval['best']]
+        else:
+            check_dim = np.random.choice(self.node_features)
+        # check_dim = np.random.choice(self.node_features)
+        filters = copy.deepcopy(self.filters)
+        for filter in filters:
+            filter['index'] = self.node_features[int(filter['index'])]
+        sqls,check_dim = active_learning_tool.getdata(self.operator,filters,model=self.modelname)
+
+
+        # self.add_one(data)
+
+        return sqls,check_dim #len(data)
 
 
 

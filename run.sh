@@ -1,2 +1,3 @@
-python main.py --train_data ./data/imdb_synthetic.txt --test_data ./data/imdb_job-light.txt --db imdb --save_model_name imdb_synthetic --load_model_name imdb_synthetic --leaf_num 10
-python main.py --test --load_model --test_data ./data/imdb_scale.txt --db imdb --load_model_name imdb_synthetic
+python ./experiments/main.py --workload ./data/experiment/knob_tpch_test.txt --db tpch --load_model_name tpch --save_model_name tpch --qerror_threshold 1.1 --sample_num_per_expansion 80 --knob_change --aim 
+python ./experiments/main.py --workload ./data/experiment/knob_tpcds_test.txt --db tpcds --load_model_name tpcds --save_model_name tpcds --qerror_threshold 1.1 --sample_num_per_expansion 80 --knob_change --aim 
+python ./experiments/main.py --workload ./data/experiment/knob_imdb_test.txt --db imdb --load_model_name imdb --save_model_name imdb --qerror_threshold 1.1 --sample_num_per_expansion 80 --knob_change --aim -

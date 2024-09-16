@@ -90,8 +90,8 @@ class Postgres_Connector:
             print(err)
         stdin, stdout, stderr = ssh.exec_command(
             "free && sync && sudo -S sh -c 'echo 3 >/proc/sys/vm/drop_caches' && free > /dev/null",get_pty=True)
-
-        stdin.write(f'{self.ssh_password}\n')
+        if self.server == "127.0.0.1" :
+            stdin.write(f'{self.ssh_password}\n')
         out, err = stdout.read(), stderr.read()
         if err:
             print(err)

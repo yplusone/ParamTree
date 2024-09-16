@@ -1,50 +1,35 @@
-# Rethinking Learned Cost Models: Why Start from Scratch?
+# Rethink of a Learned Cost Model: Why Start from Scratch?
 
-Core code of our SIGMOD'24 paper "Rethinking Learned Cost Models: Why Start from Scratch?"
-
-
-In this repository, we have open-sourced the core code for ParamTree. This code can build decision trees for query/data-related C-params and predict the execution cost of queries.
+python implementation of "Rethinking Learned Cost Models: Why Start from Scratch?"
 
 ## Requirements
 
 - Python 3.7
 - pip3 install -r requirements.txt
 - Install PostgreSQL 13.3
-- Install Extension in PostgreSQL: pageinspect and pg_hint_plan
+- Install Extension in PostgresL: pageinspect and pg_hint_plan
 - alter system set max_parallel_workers_per_gather =0; 
 - alter system set enable_bitmapscan = off; 
 - Analyze;
 
+## Main Modules
+|  Module   | Description  |
+|-------|------|
+|  model  | Includes how ParamTree to split nodes and how to use ParamTree to predict the execution time of physical plans.|
+| feature  | Includes how to extract c-params from queries and databases. Also includes some data used in the rule for calculating cost. |
+| experiments  | The code includes experiments for conducting passive and active learning. |
+| recommendation  | Code for Section4.2, which recommand c-param for the next split candidate |
+| query_gen  | Code for Section4.3, which generate queries from workload queries |
 
-## Data Collection
-1. Add "EXPLAIN (ANALYZE, COSTS, BUFFERS, VERBOSE, FORMAT JSON)" to get the running statistics of queries.
-2. Because this model does not support Bitmap Index Scan, and due to machine performance issues, some query execution times are too long. We ignored these queries during execution.
-3. To eliminate interference from other programs and the impact of cached data in the shared buffer, please exclude interference from other programs and clear the database cache when collecting data.
-4. Data Format
-```
-{
-     "planinfo": result return by PostgreSQL,
-     "template": 'synthetic'/'scale'/'job-light' for IMDB or 'Q1..Q22' for TPCH,
-     "query': Executed query
-}
-```
 
 
 ## Run
-This implementation follows the traditional approach of training the model using a training dataset and testing it using a testing dataset. This is the same approach adopted by other deep learning-based methods, allowing for a more equitable comparison.
-
-Our method can be trained:
-```
-python main.py --train_data ./data/imdb_synthetic.txt --test_data ./data/imdb_job-light.txt --db imdb --save_model_name imdb_synthetic --load_model_name imdb_synthetic --leaf_num 10
-```
-
-Test:
-```
-python main.py --test --load_model --test_data ./data/imdb_scale.txt --db imdb --load_model_name imdb_synthetic
-```
+Our method can be trained in two ways:
+- **Passive**: similar to traditional deep learning models, which training on the existing samples
+- **Active**: actively generate samples based on actual workflow for training
 
 ### Information
-If you want to collect information from your own database, please fill in the relevant information of the database for connection in \feature\info.py. As clearing the cache of the operating system is required during runtime, a Linux account with root privileges also needs to be provided.
+Before running, please fill in the relevant information of the database for connection in \feature\info.py. As clearing the cache of the operating system is required during runtime, a Linux account with root privileges also needs to be provided. 
 
 Example:
 ```
@@ -60,4 +45,29 @@ db_info = {'server':"127.0.0.1",
                  'port':22
             }
         }
+```
+
+It is necessary to create the corresponding database on PostgreSQL and import the data. Some information still needs to be retrieved from the database, such as innerbucketsize in Hash Join.
+
+### Passive
+#### Train model
+
+```
+python3 main.py --mode NORMAL_TRAIN --train_data ./data/experiment/imdb_synthetic.txt --test_data ./data/experiment/imdb_job-light.txt --db imdb --save_model_name imdb_synthetic_temp --load_model_name imdb_synthetic_temp --leaf_num 20
+```
+#### Test model
+```
+python3 main.py --mode TEST --load_model --workload ./data/experiment/imdb_job-light.txt --db imdb --load_model_name imdb_synthetic_temp
+
+python3 main.py --mode TEST --load_model --workload ./data/experiment/imdb_scale.txt --db imdb --load_model_name imdb_synthetic_temp
+```
+### Active
+#### Train model
+```
+python3 main.py --mode AL_TRAIN --workload ./data/experiment/knob_tpcds_test.txt --db tpcds --save_model_name tpcds_actively --qerror_threshold 1.1 --sample_num_per_expansion 80
+```
+#### Test model
+
+```
+python3 main.py --mode TEST --load_model --workload ./data/experiment/knob_tpcds_test.txt --db tpcds --load_model_name imdb_synthetic_temp
 ```

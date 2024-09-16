@@ -4,7 +4,7 @@ import traceback
 import numpy as np
 
 from database_util.inner_bucket_size import get_innerbucketsize
-from feature.info import dbms_cparams
+from feature.infos import dbms_cparams
 
 class Plan_class():
 
@@ -15,7 +15,6 @@ class Plan_class():
         self.config_info = scheme_info.config_info
         self.table_features = scheme_info.table_features
         self.index_features = scheme_info.index_features
-        self.inner_bucket_size_info = scheme_info.inner_bucket_size_info
 
     def get_plan_info(self,plan_tree,sql, execute=True):
         result = []
@@ -312,12 +311,12 @@ class Plan_class():
 
             if table2 in self.table_features.keys():
                 if execute:
-                    res['inner_bucket_size'] = get_innerbucketsize(self.inner_bucket_size_info,table2, column2, plan['Inner Unique'],
+                    res['inner_bucket_size'] = get_innerbucketsize(table2, column2, plan['Inner Unique'],
                                                                res['BatchesNum'], res['BucketsNum'],
                                                                plan['Plans'][1]['Actual Rows'],
                                                                plan['Plans'][1]['Plans'][0]['Actual Rows'],self.db_name)
                 else:
-                    res['inner_bucket_size'] = get_innerbucketsize(self.inner_bucket_size_info,table2, column2, plan['Inner Unique'],
+                    res['inner_bucket_size'] = get_innerbucketsize(table2, column2, plan['Inner Unique'],
                                                                    res['BatchesNum'], res['BucketsNum'],
                                                                    plan['Plans'][1]['Plan Rows'],
                                                                    plan['Plans'][1]['Plans'][0]['Plan Rows'],self.db_name)

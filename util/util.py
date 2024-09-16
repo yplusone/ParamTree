@@ -132,19 +132,12 @@ def get_plantrees(file_names,subplan):
             data += f.readlines()
     plan_trees = []
     for item in data:
-        if 'Result' in item:
-            continue
+
         try:
             plan_json = json.loads(item.strip())
         except:
             pass
         if not plan_json['planinfo'] or 'Plan' not in plan_json['planinfo'].keys():
-            continue
-        if plan_json['planinfo']['Plan']['Actual Rows'] == 0:
-            continue
-        if not subplan and has_subplan(plan_json['planinfo']):
-            continue
-        if not plan_json['planinfo']:
             continue
         add_parent_info(plan_json['planinfo'])
         add_initplan_info(plan_json['planinfo'])
@@ -171,6 +164,8 @@ def get_test_results(y_pred,y_true):
         raise ValueError("Dimension Wrong")
     r = []
     for i in range(len(y_pred)):
+        # if y_true[i]<1:
+        #     continue
         r.append(max(y_true[i]/(y_pred[i]+1e-6),y_pred[i]/(y_true[i]+1e-6)))
     return {
         "mean":round(np.mean(r),2),

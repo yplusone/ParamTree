@@ -1,32 +1,32 @@
 '''
-Collect database information from pg_catalog and pg_statistic etc.
-if you want to collect information from your own database, please modify the scheme_db_info in feature/info.py
+1. need extension pageinspect.
 '''
-
+from operator import index
 import re
 import sys
+sys.path.extend(["../","./"])
+from database_util.db_connector import Postgres_Connector
+
 import pickle
 import json
 import numpy as np
 import decimal
 import os
-
-sys.path.extend(["../","./"])
-from database_util.db_connector import Postgres_Connector
-from feature.info import schema_db_info as db_info
-
+from feature.infos import schema_db_info as db_info
+from database_util.inner_bucket_size import get_pg_statistic,get_variable_numdistinct
 class Database_info():
     def __init__(self,db_name):
         self.db_name  = db_name
+        db_info['pg']['db_name'] = db_name
+        self.db_connector = Postgres_Connector(server=db_info['server'], pg = db_info['pg'], ssh = db_info['ssh'])
         server = db_info['server'].replace('.','_')
-        info_file = f'./schemeinfo/scheme_{db_name}_histogram_info.pickle'
+        info_file = f'./data/temporary/schemeinfo/scheme_{db_name}_histogram_info.pickle'
         if os.path.exists(info_file):
             file = open(info_file,"rb")
             result = pickle.load(file)
             self.config_info = result['config']
             self.table_features = result['table']
             self.index_features = result['index']
-            self.inner_bucket_size_info = result['inner_bucket_size_info']
         else:
             db_info['pg']['db_name'] = db_name
             self.db_connector = Postgres_Connector(server=db_info['server'], pg = db_info['pg'], ssh = db_info['ssh'])
@@ -36,15 +36,13 @@ class Database_info():
             self.config_info = result['config']
             result['table'] = self.get_table_infos()
             self.table_features = result['table']
-            result['inner_bucket_size_info'] = self.get_innerbucketsize_info()
-            self.inner_bucket_size_info = result['inner_bucket_size_info']
             result['index'] = self.get_index_infos()
             self.index_features = result['index']
             pickle.dump(result, file)
             
         
     def get_config_infos(self):
-        knob_file = './schemeinfo/conf.json'
+        knob_file = './data/util/conf.json'
         with open(knob_file) as f:
             confs = json.load(f)
         settings = confs.keys()
@@ -74,6 +72,8 @@ class Database_info():
                 index_def = self.db_connector.execute(f"select indexdef from pg_indexes where indexname='{index_name}';")[0][0]    
                 p1 = re.compile(r'[(](.*?)[)]', re.S)
                 index_column = re.split(',', re.findall(p1, index_def)[0])
+                # p1 = re.compile(r'ON public\.\"(.*)\" USING', re.S)
+                # index_column = re.split(',', re.findall(p1, index_def)[0])
                 index_column = [item.strip("\"") for item in index_column]
                 index_features[index_name]['columns'] = [t.strip() for t in index_column]
                 index_features[index_name]['key_column'] = len(index_column)
@@ -85,8 +85,9 @@ class Database_info():
                 else:
                     index_features[index_name]['indexCorrelation'] = self.table_features[table]['columns'][index_column[0].strip()]['corr']*0.75
                     index_features[index_name]['type'] = 'multi'
-
-                index_features[index_name]['distinctnum'] = self.inner_bucket_size_info[table][index_column[0].strip("\"").strip()][3]
+                (reltuples,mcv_freq,stanullfrac,stadistinct)=get_pg_statistic(table,index_column[0].strip(),self.db_connector)
+                isdefault,ndistinct=get_variable_numdistinct(reltuples,reltuples,mcv_freq,stanullfrac,stadistinct,True)
+                index_features[index_name]['distinctnum'] = ndistinct
         return index_features
 
     def get_table_infos(self):
@@ -153,53 +154,6 @@ class Database_info():
                     attr[4] = 8
                 offset += attr[4]
         return table_features
-    
-    def get_innerbucketsize_info(self):
-        features = {}
-        for table in self.table_features.keys():
-            if table not in features.keys():
-                features[table] = {}
-            for column_name in self.table_features[table]['columns'].keys():
-                info = self.get_pg_statistic_for_innerbucketsize(table,column_name)
-                features[table][column_name] = info
-        return features
-                
-
-    def get_pg_statistic_for_innerbucketsize(self,tbl_name,col_name):
-        """
-            Get statistis from pg_class/pg_attribute/pg_statistic.
-        """
-        reltuples=0
-        mcv_freq=0
-        stanullfrac=0
-        stadistinct=0
-        tbl_result=self.db_connector.execute('select relname,oid,reltuples from pg_class where relname=\''+tbl_name+'\';')[0]
-        if not tbl_result: 
-            print("No tbl name.")
-            reltuples=-1
-            return (reltuples,mcv_freq,stanullfrac,stadistinct)
-
-        oid=tbl_result[1]
-        reltuples=tbl_result[2]
-        tbl_result=self.db_connector.execute('select attrelid,attname,attnum from pg_attribute where attname=\''+col_name+'\' and attrelid='+str(oid)+';')[0]
-        if not tbl_result:
-            print("No col name.")
-            reltuples=-1
-            return (reltuples,mcv_freq,stanullfrac,stadistinct)
-
-        attnum=tbl_result[2]
-        att_result=self.db_connector.execute('select * from pg_statistic where starelid='+str(oid)+' and staattnum='+str(attnum)+';') #【可能没有结果】
-        if len(att_result)>0:
-            results=att_result[0]
-            stanullfrac=results[3]
-            stadistinct=results[5]
-            sta_array=[]
-            for i in range(5):#0-4，
-                sta_array.append([results[6+5*j+i] for j in range(5)]) #stakind1,staop1,stacoll,stanumbers1[1],stavalues1
-                if(sta_array[i][0]==1):
-                    mcv_array=sta_array[i][3] #{0.6,0.2}
-                    mcv_freq=mcv_array[0]#first MCV freq
-        return (reltuples,mcv_freq,stanullfrac,stadistinct)
 
     def scheme_info_append(self,fresh = False):
         scheme_file = f'./data/temporary/schemeinfo/scheme_{self.db_name}_histogram_info.txt'
@@ -293,4 +247,3 @@ class Database_info():
             res['offset'] = self.table_features[o_table]['columns'][o_col]['offset']
             res['column'] = o_col
             return  res
-

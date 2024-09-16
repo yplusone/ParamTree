@@ -1,9 +1,13 @@
 pandas
 psycopg2-binary
 tqdm
-scikit-learn
+sklearn
 numpy
 paramiko
 matplotlib
 seaborn
 scipy
+doepy
+SALib
+sqlparse
+aim
