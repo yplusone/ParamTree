@@ -1,7 +1,7 @@
 pandas
 psycopg2-binary
 tqdm
-sklearn
+scikit-learn
 numpy
 paramiko
 matplotlib

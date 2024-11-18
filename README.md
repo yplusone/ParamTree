@@ -64,7 +64,7 @@ python3 main.py --mode TEST --load_model --workload ./data/experiment/imdb_scale
 ### Active
 #### Train model
 ```
-python3 main.py --mode AL_TRAIN --workload ./data/experiment/knob_tpcds_test.txt --db tpcds --save_model_name tpcds_actively --qerror_threshold 1.1 --sample_num_per_expansion 80
+python3 main.py --mode AL_TRAIN --workload ./data/experiment/tpcds_test.txt --db tpcds --save_model_name tpcds_actively --qerror_threshold 1.1 --sample_num_per_expansion 80
 ```
 #### Test model
 
