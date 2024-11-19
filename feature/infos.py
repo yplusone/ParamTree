@@ -37,6 +37,7 @@ features = {
 ## For Running queries online
 db_info = {'server':"127.0.0.1",
             'pg':{
+                'db_name':"imdb",
                   'username':"postgres",
                  'password':"postgres",
                  'port':5434,
@@ -52,6 +53,7 @@ db_info = {'server':"127.0.0.1",
 
 schema_db_info = {'server':"127.0.0.1",
             'pg':{
+                'db_name':"imdb",
                   'username':"postgres",
                  'password':"postgres",
                  'port':5434,
