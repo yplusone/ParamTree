@@ -22,6 +22,7 @@ class SqlModify():
         self.comparisons = self.collect_comparisons()
         self.randomsql_selector_tool = RandomSQL_Selector(self.db,self.db.db_name,self.plan_tool)
         self.key_words = self.get_key_word()
+        
     def parse(self,queries):
         res = []
         for query in queries:

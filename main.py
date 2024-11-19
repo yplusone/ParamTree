@@ -76,7 +76,7 @@ if __name__ == "__main__":
         else:
             run = None
         pool_file_path = f"./data/temporary/query_gen_pool"
-        file_path = f"{pool_file_path}/db_{args.db}_47_96_181_98"
+        file_path = f"{pool_file_path}/db_{args.db}"
         if os.path.exists(file_path):
             shutil.rmtree(file_path)
         tool.train_model_actively(args,run)

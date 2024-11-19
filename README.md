@@ -69,5 +69,5 @@ python3 main.py --mode AL_TRAIN --workload ./data/experiment/tpcds_test.txt --db
 #### Test model
 
 ```
-python3 main.py --mode TEST --load_model --workload ./data/experiment/knob_tpcds_test.txt --db tpcds --load_model_name imdb_synthetic_temp
+python3 main.py --mode TEST --load_model --workload ./data/experiment/tpcds_test.txt --db tpcds --load_model_name tpcds_actively_last
 ```
