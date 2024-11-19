@@ -35,31 +35,33 @@ features = {
                 "runtime_cost":{"node_features":all_cparams},            },
         }
 ## For Running queries online
-db_info = {'server':"120.55.80.48",
-'pg' : {'db_name':'imdb',
-      'username':"postgres",
-     'password':"postgres",
-     'port':58888,
-     'command_ctrl':"docker exec -it  --user postgres database /home/yjn/pgsql13.1/bin/pg_ctl -D /home/yjn/pgsql13.1_data"},
-'ssh' :{
-       'username':"root",
-     'password':"Yplusone2323!!",
-     'port':22
-}}
+db_info = {'server':"127.0.0.1",
+            'pg':{
+                  'username':"postgres",
+                 'password':"postgres",
+                 'port':5434,
+                 'command_ctrl':"docker exec -it  --user postgres database /home/usr/pgsql13.1/bin/pg_ctl -D /home/usr/pgsql13.1_data"},
+            'ssh' : {
+                   'username':"root",
+                 'password':"root",
+                 'port':22
+            }
+        }
 
 # For collecting statistics
 
-schema_db_info = {'server':"120.55.80.48",
-'pg' : {'db_name':'imdb',
-	  'username':"postgres",
-	 'password':"postgres",
-	 'port':58888,
-	 'command_ctrl':"docker exec -it  --user postgres database /home/yjn/pgsql13.1/bin/pg_ctl -D /home/yjn/pgsql13.1_data"},
-'ssh' :{
-	   'username':"root",
-	 'password':"Yplusone2323!!",
-	 'port':22
-}}
+schema_db_info = {'server':"127.0.0.1",
+            'pg':{
+                  'username':"postgres",
+                 'password':"postgres",
+                 'port':5434,
+                 'command_ctrl':"docker exec -it  --user postgres database /home/usr/pgsql13.1/bin/pg_ctl -D /home/usr/pgsql13.1_data"},
+            'ssh' : {
+                   'username':"root",
+                 'password':"root",
+                 'port':22
+            }
+        }
 
 coefs = np.array([np.array([3.93205145e-05, 7.86410291e-05, 3.48516085e-04, 5.03552805e-03,
                             4.49506951e-02, 7.86410291e-05, 7.86410291e-05]), 0], dtype=object)
